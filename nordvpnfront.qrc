@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>data.txt</file>
+        <file>nordvpn.png</file>
+        <file>nordvpnicon.png</file>
+        <file>nordvpnicon.ico</file>
+    </qresource>
+</RCC>
