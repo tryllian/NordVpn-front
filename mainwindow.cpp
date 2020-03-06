@@ -1,8 +1,20 @@
+#include <QCloseEvent>
+#include <QSettings>
+#include <QFile>
+#include <QStandardItem>
+#include <QMessageBox>
+#include <QTreeWidgetItem>
+#include <QtDebug>
+#include <QTimer>
+#include <QStandardPaths>
+
+
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "dialog.h"
 #include "login.h"
 #include "licence.h"
+#include "mainwindow.h"
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -15,6 +27,11 @@ MainWindow::MainWindow(QWidget *parent)
     ui->protoCombo->addItem("TCP","TCP");
     ui->protoCombo->addItem("UDP","UDP");
     Actions = new vpaanctions();
+
+    m_sSettingsFile = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/NordVpn-Front/settings.ini";
+    loadSettings();
+
+
 
     QStandardItemModel *settings = Actions->GetSettings();
     model = Actions->GetLocations();
@@ -33,10 +50,35 @@ MainWindow::MainWindow(QWidget *parent)
     //delete mypix;
     createActions();
     createMenus();
+    createTrayActions();
+    createTrayIcon();
+
+    //recentVpns = new QStringList();
+    updateRecentFileActions();
+    ui->treeView->installEventFilter(this);
+    trayIcon->setIcon(QIcon(":/nordvpnicon.png"));
+    trayIcon->show();
 
 
 
+}
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+#ifdef Q_OS_OSX
+    if (!event->spontaneous() || !isVisible()) {
+        return;
+    }
+#endif
+    if (trayIcon->isVisible()) {
+        QMessageBox::information(this, tr("Systray"),
+                                 tr("The program will keep running in the "
+                                    "system tray. To terminate the program, "
+                                    "choose <b>Quit</b> in the context menu "
+                                    "of the system tray entry."));
+        hide();
+        event->ignore();
+    }
 }
 
 void MainWindow::createActions()
@@ -195,42 +237,57 @@ void MainWindow::setupSettings(QStandardItemModel* settings)
 void MainWindow::on_ConnectBut_clicked()
 {
     QMessageBox msgBox;
+    QString location ;
     QModelIndex index = ui->treeView->selectionModel()->currentIndex();
    // QAbstractItemModel *modelview = ui->treeView->model();
     auto *modelview = ui->treeView->model();
 
-    if (!index.parent().isValid())
+    if (index.parent().isValid())
         {
-        Actions->Connect(modelview->data(index.parent(),0).toString() + " " + model->data(index,0).toString());
+            location = modelview->data(index.parent(),0).toString() + " " + model->data(index,0).toString();
         }
-    else{
-        Actions->Connect(modelview->data(index,0).toString());
-    }
+    else
+        {
+            location =  modelview->data(index,0).toString();
+        }
+
+    Actions->Connect(location);
+    updateRecentVpns(location);
     msgBox.setText(Actions->Status());
 
             msgBox.exec();
     ui->label->setText(Actions->Status()) ;
+    updateRecentFileActions();
+
 }
 
 void MainWindow::on_treeView_doubleClicked(const QModelIndex &index)
 {
 
     QMessageBox msgBox;
+    QString location;
     //QModelIndex index = ui->treeView->selectionModel()->currentIndex();
    // QAbstractItemModel *modelview = ui->treeView->model();
     auto *modelview = ui->treeView->model();
 
-    if (!index.parent().isValid())
+    if (index.parent().isValid())
         {
-        Actions->Connect(modelview->data(index.parent(),0).toString() + " " + model->data(index,0).toString());
+            location = modelview->data(index.parent(),0).toString() + " " + model->data(index,0).toString();
         }
-    else{
-        Actions->Connect(modelview->data(index,0).toString());
-    }
+    else
+        {
+            location = modelview->data(index,0).toString();
+        }
+
+    Actions->Connect(location);
+    updateRecentVpns(location);
+    qDebug() << "Hello from this file" << location;
+
     msgBox.setText(Actions->Status());
 
             msgBox.exec();
     ui->label->setText(Actions->Status()) ;
+    updateRecentFileActions();
 }
 
 void MainWindow::on_pushButton_clicked()
@@ -436,3 +493,158 @@ void MainWindow::on_pushButton_2_clicked()
                 tr("Your were not logout"));
     }
 }
+
+void MainWindow::createTrayActions()
+{
+    minimizeAction = new QAction(tr("Mi&nimize"), this);
+    connect(minimizeAction, &QAction::triggered, this, &QWidget::hide);
+
+    maximizeAction = new QAction(tr("Ma&ximize"), this);
+    connect(maximizeAction, &QAction::triggered, this, &QWidget::showMaximized);
+
+    restoreAction = new QAction(tr("&Restore"), this);
+    connect(restoreAction, &QAction::triggered, this, &QWidget::showNormal);
+
+    quitAction = new QAction(tr("&Quit"), this);
+    connect(quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
+
+    connectFav = new QAction(tr("&Connect"), this);
+    connectFav->setData("aasdasd");
+   // connect(connectFav, &QAction::triggered, this, SLOT(&MainWindow::aboutQt));
+    connect(connectFav, &QAction::triggered, this, &MainWindow::conectFavorites);
+
+    for (int i = 0; i < MaxRecentFiles; ++i) {
+            menuFavActs[i] = new QAction(this);
+            menuFavActs[i]->setVisible(false);
+            connect(menuFavActs[i], &QAction::triggered,this, &MainWindow::conectFavorites);
+        }
+
+
+}
+
+void MainWindow::createTrayIcon()
+{
+    trayIconMenu = new QMenu(this);
+    trayIconMenu->addAction(minimizeAction);
+    trayIconMenu->addAction(maximizeAction);
+    trayIconMenu->addAction(restoreAction);
+    trayIconMenu->addSeparator();
+    trayIconMenu->addSection("Recent Vpns");
+    for (int i = 0; i < MaxRecentFiles; ++i)
+            trayIconMenu->addAction(menuFavActs[i]);
+    trayIconMenu->addSeparator();
+    trayIconMenu->addAction(quitAction);
+
+    trayIcon = new QSystemTrayIcon(this);
+    trayIcon->setContextMenu(trayIconMenu);
+    QMainWindow::setVisible(false);
+}
+
+void MainWindow::setVisible(bool visible)
+{
+    minimizeAction->setEnabled(visible);
+    maximizeAction->setEnabled(!isMaximized());
+    restoreAction->setEnabled(isMaximized() || !visible);
+    QMainWindow::setVisible(visible);
+}
+
+
+void MainWindow::conectFavorites(){
+       QMessageBox msgBox;
+    QAction *action = qobject_cast<QAction *>(sender());
+    QString location = action->data().toString();
+    Actions->Connect(location);
+    //updateRecentVpns(location);
+    msgBox.setText(Actions->Status());
+
+            msgBox.exec();
+    ui->label->setText(Actions->Status()) ;
+}
+
+void MainWindow::updateRecentVpns(QString location)
+{
+    int numRecentVpns = recentVpns.size();
+    bool found = false;
+
+    for (int i = 0; i < numRecentVpns; ++i)
+    {
+        if (recentVpns.value(i) == location)
+        {
+            recentVpns.removeAt(i);
+            found = true;
+        }
+    }
+    if (numRecentVpns == 5 )
+    {
+
+         if (!found)
+            recentVpns.removeLast();
+
+    }
+    recentVpns.insert(0,location);
+    saveSettings();
+}
+
+void MainWindow::loadSettings()
+{
+ QString test;
+ QSettings settings(m_sSettingsFile, QSettings::IniFormat);
+ QString firstload = settings.value("firstload").toString();
+
+ if (firstload=="")
+ {
+     qDebug() << "First load";
+ }
+ //settings.setValue("recentVpns", recentVpns);
+ recentVpns = settings.value("recentVpns").toStringList();
+
+ //qDebug() << "value " << test;
+}
+
+void MainWindow::saveSettings()
+{
+ QString test;
+ QSettings settings(m_sSettingsFile, QSettings::IniFormat);
+
+
+  settings.setValue("recentVpns", recentVpns);
+ test = settings.value("recentVpns").toString();
+
+ //qDebug() << "value " << test;
+}
+
+void MainWindow::updateRecentFileActions()
+{
+    QSettings settings;
+    //QStringList files = settings.value("recentFileList").toStringList();
+
+    int numRecentFiles = recentVpns.size();
+
+    for (int i = 0; i < numRecentFiles; ++i) {
+        //QString text = tr("&%1 %2").arg(i + 1).arg(strippedName(files[i]));
+        menuFavActs[i]->setText(recentVpns.value(i).replace('_',' '));
+        menuFavActs[i]->setData(recentVpns.value(i));
+        menuFavActs[i]->setVisible(true);
+    }
+   //for (int j = numRecentFiles; j < MaxRecentFiles; ++j)
+    //    recentFileActs[j]->setVisible(false);
+
+   // separatorAct->setVisible(numRecentFiles > 0);
+}
+
+bool MainWindow::eventFilter(QObject *target, QEvent *event)
+{
+    if (target == ui->treeView)
+    {
+        QContextMenuEvent* m = dynamic_cast<QContextMenuEvent*>(event);
+        if (event->type() == QEvent::ContextMenu)
+        {
+                //Create context menu here
+                return true;
+        }
+    }
+    return false;
+}
+
+
+

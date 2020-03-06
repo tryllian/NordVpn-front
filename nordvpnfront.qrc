@@ -4,5 +4,6 @@
         <file>nordvpn.png</file>
         <file>nordvpnicon.png</file>
         <file>nordvpnicon.ico</file>
+        <file>settings.ini</file>
     </qresource>
 </RCC>

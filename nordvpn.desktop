@@ -1,0 +1,22 @@
+[Desktop Entry]
+Categories=Multimedia;
+Comment[en_AU]=
+Comment=
+Exec=/home/tryllian/Public/Nordvpn-front
+GenericName[en_AU]=
+GenericName=
+Icon=/home/tryllian/Public/nordvpnicon.png
+MimeType=
+Name[en_AU]=
+Name=
+Path=/home/tryllian/Public
+StartupNotify=true
+Terminal=false
+TerminalOptions=
+Type=Application
+Version=1.0
+X-DBUS-ServiceName=
+X-DBUS-StartupType=
+X-KDE-SubstituteUID=false
+X-KDE-Username=
+icon=/home/tryllian/Public/nordvpnicon.png

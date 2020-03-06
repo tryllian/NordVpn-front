@@ -30,7 +30,7 @@ void vpaanctions::Connect(QString location)
 bool vpaanctions::CheckLogin()
 {
     QProcess action;
-    action.start("nordvpn account");
+    action.start("c");
 
     if (!action.waitForFinished())
             return "false";
