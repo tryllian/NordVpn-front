@@ -1,10 +1,9 @@
 # NordVpn-front
 Version Beta 0.3
 
-Reqirements
+Reqirements -
 
   Nordvpn offical app
-
   qt
   
 Front end for the official NordVpn linux app
